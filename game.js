@@ -34,6 +34,9 @@ const THROW_SPEED = 14;
 const CAMP_THRESHOLD = 180; // frames before camping penalty
 const CAMP_PENALTY_FORCE = 8;
 const MAX_BALL_SPEED = 18;
+const BOOST_DURATION = 300; // 5 seconds at 60fps
+const BOOST_COOLDOWN = 600; // 10 second cooldown
+const BOOST_SPEED_MULT = 1.5;
 
 // --- Game State ---
 let gameState = 'menu'; // menu, modeSelect, durationSelect, playing, goal, gameOver
@@ -57,7 +60,7 @@ let flashTimer = 0;
 const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyA','KeyS','KeyD','KeyE'].includes(e.code)) {
     e.preventDefault();
   }
 });
@@ -91,7 +94,10 @@ function createSlime(x, color, facing) {
     campTimer: 0,
     campPenalized: false,
     eyeX: 0, eyeY: 0,
-    score: 0
+    score: 0,
+    boostTimer: 0,
+    boostCooldown: 0,
+    isBoosted: false
   };
 }
 
@@ -115,6 +121,9 @@ function resetPositions(scoredGoal) {
   slimes[0].grabCooldown = 0;
   slimes[0].isGrabbing = false;
   slimes[0].campTimer = 0;
+  slimes[0].boostTimer = 0;
+  slimes[0].boostCooldown = 0;
+  slimes[0].isBoosted = false;
 
   slimes[1].x = W * 0.75;
   slimes[1].y = GROUND_Y;
@@ -124,6 +133,9 @@ function resetPositions(scoredGoal) {
   slimes[1].grabCooldown = 0;
   slimes[1].isGrabbing = false;
   slimes[1].campTimer = 0;
+  slimes[1].boostTimer = 0;
+  slimes[1].boostCooldown = 0;
+  slimes[1].isBoosted = false;
 }
 
 function startGame() {
@@ -307,6 +319,15 @@ function tryGrabBall(playerIdx) {
   }
 }
 
+function activateBoost(playerIdx) {
+  const slime = slimes[playerIdx];
+  if (slime.boostCooldown > 0 || slime.isBoosted) return;
+  slime.isBoosted = true;
+  slime.boostTimer = BOOST_DURATION;
+  spawnParticles(slime.x, slime.y - slime.radius * 0.5, '#ffd740', 15);
+  screenShake = 4;
+}
+
 function scoreGoal(scoringPlayer) {
   scores[scoringPlayer]++;
   goalScorer = scoringPlayer;
@@ -410,6 +431,17 @@ function updateSlime(slime, idx) {
   // Cooldowns
   if (slime.grabCooldown > 0) slime.grabCooldown--;
 
+  // Boost update
+  if (slime.isBoosted) {
+    slime.boostTimer--;
+    if (slime.boostTimer <= 0) {
+      slime.isBoosted = false;
+      slime.boostCooldown = BOOST_COOLDOWN;
+    }
+  } else if (slime.boostCooldown > 0) {
+    slime.boostCooldown--;
+  }
+
   // Anti-camping detection
   const ownGoalX = idx === 0 ? GOAL_DEPTH + slime.radius + 30 : W - GOAL_DEPTH - slime.radius - 30;
   if (Math.abs(slime.x - ownGoalX) < 80 && slime.y > goalTop) {
@@ -465,10 +497,11 @@ function collideSlimes() {
 
 // --- Player Input ---
 function handlePlayerInput(slime, idx) {
+  const speed = slime.isBoosted ? MOVE_SPEED * BOOST_SPEED_MULT : MOVE_SPEED;
   if (idx === 0) {
-    // Player 1: Arrow keys
-    if (keys['ArrowLeft']) slime.vx = -MOVE_SPEED;
-    if (keys['ArrowRight']) slime.vx = MOVE_SPEED;
+    // Player 1: Arrow keys, Space = boost
+    if (keys['ArrowLeft']) slime.vx = -speed;
+    if (keys['ArrowRight']) slime.vx = speed;
     if (keys['ArrowUp'] && slime.onGround) slime.vy = JUMP_FORCE;
     if (keys['ArrowDown']) {
       if (slime.isGrabbing) {
@@ -477,10 +510,11 @@ function handlePlayerInput(slime, idx) {
         tryGrabBall(idx);
       }
     }
+    if (keys['Space']) activateBoost(idx);
   } else if (idx === 1 && gameMode === 'multi') {
-    // Player 2: WASD
-    if (keys['KeyA']) slime.vx = -MOVE_SPEED;
-    if (keys['KeyD']) slime.vx = MOVE_SPEED;
+    // Player 2: WASD, E = boost
+    if (keys['KeyA']) slime.vx = -speed;
+    if (keys['KeyD']) slime.vx = speed;
     if (keys['KeyW'] && slime.onGround) slime.vy = JUMP_FORCE;
     if (keys['KeyS']) {
       if (slime.isGrabbing) {
@@ -489,6 +523,7 @@ function handlePlayerInput(slime, idx) {
         tryGrabBall(idx);
       }
     }
+    if (keys['KeyE']) activateBoost(idx);
   }
 }
 
@@ -542,12 +577,20 @@ function updateAI(slime, idx) {
     shouldJump = shouldJump || (distToBall < 200 && ball.y < slime.y);
   }
 
+  // AI boost: activate when ball is close and on my side, or when behind on score
+  const aiSpeed = slime.isBoosted ? MOVE_SPEED * BOOST_SPEED_MULT : MOVE_SPEED;
+  if (!slime.isBoosted && slime.boostCooldown <= 0) {
+    const shouldBoost = (ballNearMyGoal && distToBall < 150) ||
+      (scores[0] > scores[1] && timeRemaining < matchDuration * 0.3 && distToBall < 200);
+    if (shouldBoost) activateBoost(idx);
+  }
+
   // Movement
   const moveThreshold = 15;
   if (slime.x < targetPosX - moveThreshold) {
-    slime.vx = MOVE_SPEED * 0.9;
+    slime.vx = aiSpeed * 0.9;
   } else if (slime.x > targetPosX + moveThreshold) {
-    slime.vx = -MOVE_SPEED * 0.9;
+    slime.vx = -aiSpeed * 0.9;
   }
 
   // Jump
@@ -727,6 +770,28 @@ function drawSlime(slime) {
     ctx.setLineDash([]);
   }
 
+  // Boost glow effect
+  if (slime.isBoosted) {
+    const glowAlpha = 0.3 + Math.sin(Date.now() * 0.015) * 0.15;
+    ctx.save();
+    ctx.shadowColor = '#ffd740';
+    ctx.shadowBlur = 25;
+    ctx.fillStyle = `rgba(255, 215, 64, ${glowAlpha})`;
+    ctx.beginPath();
+    ctx.arc(slime.x, slime.y, slime.radius + 8, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Boost speed lines
+    if (Math.random() < 0.4) {
+      spawnParticles(
+        slime.x - slime.vx * 2 + (Math.random() - 0.5) * 30,
+        slime.y - Math.random() * slime.radius * 0.5,
+        '#ffd740', 1
+      );
+    }
+  }
+
   // Camp warning
   if (slime.campTimer > CAMP_THRESHOLD * 0.6) {
     const warningAlpha = (Math.sin(Date.now() * 0.01) + 1) * 0.3;
@@ -861,6 +926,48 @@ function drawHUD() {
       ctx.fillText('GRAB', i === 0 ? barX : barX + barW, H - 30);
     }
   }
+
+  // Boost HUD indicators
+  for (let i = 0; i < 2; i++) {
+    const slime = slimes[i];
+    const barX = i === 0 ? 20 : W - 120;
+    const barW = 100;
+    const barY = H - 45;
+
+    if (slime.isBoosted) {
+      // Active boost — show remaining duration
+      const progress = slime.boostTimer / BOOST_DURATION;
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(barX, barY, barW, 8);
+      ctx.fillStyle = '#ffd740';
+      ctx.fillRect(barX, barY, barW * progress, 8);
+      ctx.font = 'bold 10px Courier New';
+      ctx.fillStyle = '#ffd740';
+      ctx.textAlign = i === 0 ? 'left' : 'right';
+      ctx.fillText('BOOST', i === 0 ? barX : barX + barW, barY - 4);
+    } else if (slime.boostCooldown > 0) {
+      // On cooldown — show recharge progress
+      const progress = 1 - slime.boostCooldown / BOOST_COOLDOWN;
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(barX, barY, barW, 8);
+      ctx.fillStyle = 'rgba(255, 215, 64, 0.4)';
+      ctx.fillRect(barX, barY, barW * progress, 8);
+      ctx.font = '10px Courier New';
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.textAlign = i === 0 ? 'left' : 'right';
+      ctx.fillText('BOOST', i === 0 ? barX : barX + barW, barY - 4);
+    } else {
+      // Ready to use
+      const pulse = 0.5 + Math.sin(Date.now() * 0.005) * 0.2;
+      ctx.fillStyle = `rgba(255, 215, 64, ${pulse})`;
+      ctx.fillRect(barX, barY, barW, 8);
+      ctx.font = 'bold 10px Courier New';
+      ctx.fillStyle = '#ffd740';
+      ctx.textAlign = i === 0 ? 'left' : 'right';
+      ctx.fillText('BOOST READY', i === 0 ? barX : barX + barW, barY - 4);
+    }
+  }
+
   ctx.textAlign = 'center';
 }
 
@@ -1058,7 +1165,8 @@ function drawControls() {
       controls: [
         ['Left / Right', 'Move'],
         ['Up', 'Jump'],
-        ['Down', 'Grab / Throw Ball']
+        ['Down', 'Grab / Throw Ball'],
+        ['Space', 'Super Boost (5s)']
       ]
     },
     {
@@ -1067,7 +1175,8 @@ function drawControls() {
       controls: [
         ['A / D', 'Move'],
         ['W', 'Jump'],
-        ['S', 'Grab / Throw Ball']
+        ['S', 'Grab / Throw Ball'],
+        ['E', 'Super Boost (5s)']
       ]
     }
   ];
