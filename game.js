@@ -770,24 +770,91 @@ function drawSlime(slime) {
     ctx.setLineDash([]);
   }
 
-  // Boost glow effect
+  // Super Mode SSJ aura effect
   if (slime.isBoosted) {
-    const glowAlpha = 0.3 + Math.sin(Date.now() * 0.015) * 0.15;
+    const t = Date.now() * 0.001;
     ctx.save();
+
+    // Outer aura glow (pulsing)
+    const glowAlpha = 0.2 + Math.sin(t * 8) * 0.1;
     ctx.shadowColor = '#ffd740';
-    ctx.shadowBlur = 25;
+    ctx.shadowBlur = 35 + Math.sin(t * 10) * 10;
     ctx.fillStyle = `rgba(255, 215, 64, ${glowAlpha})`;
     ctx.beginPath();
-    ctx.arc(slime.x, slime.y, slime.radius + 8, Math.PI, 0);
+    ctx.arc(slime.x, slime.y, slime.radius + 12 + Math.sin(t * 12) * 4, Math.PI, 0);
     ctx.closePath();
     ctx.fill();
+
+    // Flame-like aura tendrils rising upward
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < 7; i++) {
+      const angle = Math.PI + (i / 6) * Math.PI;
+      const baseX = slime.x + Math.cos(angle) * (slime.radius * 0.8);
+      const baseY = slime.y + Math.sin(angle) * (slime.radius * 0.4);
+      const flameH = 20 + Math.sin(t * 15 + i * 2.3) * 15 + Math.random() * 8;
+      const flameW = 8 + Math.sin(t * 10 + i) * 4;
+      const sway = Math.sin(t * 12 + i * 1.7) * 6;
+
+      const auraGrad = ctx.createLinearGradient(baseX, baseY, baseX + sway, baseY - flameH);
+      auraGrad.addColorStop(0, 'rgba(255, 215, 64, 0.6)');
+      auraGrad.addColorStop(0.4, 'rgba(255, 180, 0, 0.35)');
+      auraGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+      ctx.fillStyle = auraGrad;
+
+      ctx.beginPath();
+      ctx.moveTo(baseX - flameW / 2, baseY);
+      ctx.quadraticCurveTo(baseX + sway - flameW / 3, baseY - flameH * 0.6, baseX + sway, baseY - flameH);
+      ctx.quadraticCurveTo(baseX + sway + flameW / 3, baseY - flameH * 0.6, baseX + flameW / 2, baseY);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Lightning bolts (SSJ electricity)
+    const numBolts = 2 + Math.floor(Math.random() * 2);
+    for (let b = 0; b < numBolts; b++) {
+      // Random start point on the aura edge
+      const startAngle = Math.PI + Math.random() * Math.PI;
+      let lx = slime.x + Math.cos(startAngle) * (slime.radius + 8);
+      let ly = slime.y + Math.sin(startAngle) * (slime.radius * 0.5) - Math.random() * 20;
+
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+
+      const segments = 4 + Math.floor(Math.random() * 3);
+      for (let s = 0; s < segments; s++) {
+        lx += (Math.random() - 0.5) * 30;
+        ly -= Math.random() * 15 + 5;
+        ctx.lineTo(lx, ly);
+      }
+
+      ctx.strokeStyle = `rgba(200, 230, 255, ${0.6 + Math.random() * 0.4})`;
+      ctx.lineWidth = 1 + Math.random() * 1.5;
+      ctx.stroke();
+
+      // Bright core of lightning
+      if (Math.random() < 0.5) {
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 + Math.random() * 0.3})`;
+        ctx.lineWidth = 0.5 + Math.random();
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
-    // Boost speed lines
-    if (Math.random() < 0.4) {
+
+    // Aura particles rising up
+    if (Math.random() < 0.6) {
       spawnParticles(
-        slime.x - slime.vx * 2 + (Math.random() - 0.5) * 30,
-        slime.y - Math.random() * slime.radius * 0.5,
-        '#ffd740', 1
+        slime.x + (Math.random() - 0.5) * slime.radius * 1.5,
+        slime.y - Math.random() * slime.radius * 0.8,
+        Math.random() < 0.7 ? '#ffd740' : '#ffe082', 1
+      );
+    }
+    // Occasional electric spark particle
+    if (Math.random() < 0.15) {
+      spawnParticles(
+        slime.x + (Math.random() - 0.5) * slime.radius * 2,
+        slime.y - Math.random() * slime.radius,
+        '#aaddff', 1
       );
     }
   }
@@ -927,7 +994,7 @@ function drawHUD() {
     }
   }
 
-  // Boost HUD indicators
+  // Super Mode HUD indicators
   for (let i = 0; i < 2; i++) {
     const slime = slimes[i];
     const barX = i === 0 ? 20 : W - 120;
@@ -935,7 +1002,7 @@ function drawHUD() {
     const barY = H - 45;
 
     if (slime.isBoosted) {
-      // Active boost — show remaining duration
+      // Active — show remaining duration
       const progress = slime.boostTimer / BOOST_DURATION;
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.fillRect(barX, barY, barW, 8);
@@ -944,7 +1011,7 @@ function drawHUD() {
       ctx.font = 'bold 10px Courier New';
       ctx.fillStyle = '#ffd740';
       ctx.textAlign = i === 0 ? 'left' : 'right';
-      ctx.fillText('BOOST', i === 0 ? barX : barX + barW, barY - 4);
+      ctx.fillText('SUPER MODE', i === 0 ? barX : barX + barW, barY - 4);
     } else if (slime.boostCooldown > 0) {
       // On cooldown — show recharge progress
       const progress = 1 - slime.boostCooldown / BOOST_COOLDOWN;
@@ -955,7 +1022,7 @@ function drawHUD() {
       ctx.font = '10px Courier New';
       ctx.fillStyle = 'rgba(255,255,255,0.35)';
       ctx.textAlign = i === 0 ? 'left' : 'right';
-      ctx.fillText('BOOST', i === 0 ? barX : barX + barW, barY - 4);
+      ctx.fillText('SUPER MODE', i === 0 ? barX : barX + barW, barY - 4);
     } else {
       // Ready to use
       const pulse = 0.5 + Math.sin(Date.now() * 0.005) * 0.2;
@@ -964,7 +1031,7 @@ function drawHUD() {
       ctx.font = 'bold 10px Courier New';
       ctx.fillStyle = '#ffd740';
       ctx.textAlign = i === 0 ? 'left' : 'right';
-      ctx.fillText('BOOST READY', i === 0 ? barX : barX + barW, barY - 4);
+      ctx.fillText('SUPER READY', i === 0 ? barX : barX + barW, barY - 4);
     }
   }
 
@@ -1166,7 +1233,7 @@ function drawControls() {
         ['Left / Right', 'Move'],
         ['Up', 'Jump'],
         ['Down', 'Grab / Throw Ball'],
-        ['Space', 'Super Boost (5s)']
+        ['Space', 'Super Mode (5s)']
       ]
     },
     {
@@ -1176,7 +1243,7 @@ function drawControls() {
         ['A / D', 'Move'],
         ['W', 'Jump'],
         ['S', 'Grab / Throw Ball'],
-        ['E', 'Super Boost (5s)']
+        ['E', 'Super Mode (5s)']
       ]
     }
   ];
