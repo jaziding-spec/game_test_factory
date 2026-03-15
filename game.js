@@ -367,13 +367,14 @@ function collideBallSlime(slime) {
     const rvDot = rvx * nx + rvy * ny;
 
     if (rvDot < 0) {
-      const impulse = -(1 + SLIME_BOUNCE) * rvDot;
+      const hitMult = slime.isBoosted ? BOOST_SPEED_MULT : 1;
+      const impulse = -(1 + SLIME_BOUNCE) * rvDot * hitMult;
       ball.vx += impulse * nx;
       ball.vy += impulse * ny;
 
       // Add some of the slime's velocity
-      ball.vx += slime.vx * 0.3;
-      ball.vy += slime.vy * 0.3;
+      ball.vx += slime.vx * 0.3 * hitMult;
+      ball.vy += slime.vy * 0.3 * hitMult;
 
       // Spin based on hit position
       ball.angularVel += (ball.x - slime.x) * 0.01;
@@ -776,12 +777,12 @@ function drawSlime(slime) {
     ctx.save();
 
     // Outer aura glow (pulsing)
-    const glowAlpha = 0.2 + Math.sin(t * 8) * 0.1;
+    const glowAlpha = 0.2 + Math.sin(t * 4) * 0.1;
     ctx.shadowColor = '#ffd740';
-    ctx.shadowBlur = 35 + Math.sin(t * 10) * 10;
+    ctx.shadowBlur = 35 + Math.sin(t * 5) * 10;
     ctx.fillStyle = `rgba(255, 215, 64, ${glowAlpha})`;
     ctx.beginPath();
-    ctx.arc(slime.x, slime.y, slime.radius + 12 + Math.sin(t * 12) * 4, Math.PI, 0);
+    ctx.arc(slime.x, slime.y, slime.radius + 12 + Math.sin(t * 6) * 4, Math.PI, 0);
     ctx.closePath();
     ctx.fill();
 
@@ -791,9 +792,9 @@ function drawSlime(slime) {
       const angle = Math.PI + (i / 6) * Math.PI;
       const baseX = slime.x + Math.cos(angle) * (slime.radius * 0.8);
       const baseY = slime.y + Math.sin(angle) * (slime.radius * 0.4);
-      const flameH = 20 + Math.sin(t * 15 + i * 2.3) * 15 + Math.random() * 8;
-      const flameW = 8 + Math.sin(t * 10 + i) * 4;
-      const sway = Math.sin(t * 12 + i * 1.7) * 6;
+      const flameH = 20 + Math.sin(t * 6 + i * 2.3) * 15 + Math.sin(t * 3.7 + i) * 8;
+      const flameW = 8 + Math.sin(t * 5 + i) * 4;
+      const sway = Math.sin(t * 4.5 + i * 1.7) * 6;
 
       const auraGrad = ctx.createLinearGradient(baseX, baseY, baseX + sway, baseY - flameH);
       auraGrad.addColorStop(0, 'rgba(255, 215, 64, 0.6)');
@@ -809,40 +810,85 @@ function drawSlime(slime) {
       ctx.fill();
     }
 
-    // Lightning bolts (SSJ electricity)
-    const numBolts = 2 + Math.floor(Math.random() * 2);
+    // Lightning bolts - arcing outward/diagonally like SSJ2
+    // Use a seeded slow cycle so bolts persist and animate smoothly
+    const boltCycle = Math.floor(t * 2.5); // new bolt pattern every ~0.4s
+    const boltFade = (t * 2.5) % 1; // 0-1 fade within each cycle
+    const boltAlpha = boltFade < 0.7 ? 1 : 1 - (boltFade - 0.7) / 0.3; // fade out last 30%
+
+    // Seeded random for consistent bolts within a cycle
+    function seededRand(seed) {
+      const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
+    const numBolts = 3;
     for (let b = 0; b < numBolts; b++) {
-      // Random start point on the aura edge
-      const startAngle = Math.PI + Math.random() * Math.PI;
-      let lx = slime.x + Math.cos(startAngle) * (slime.radius + 8);
-      let ly = slime.y + Math.sin(startAngle) * (slime.radius * 0.5) - Math.random() * 20;
+      const seed = boltCycle * 10 + b;
+
+      // Start from body surface
+      const startAngle = Math.PI + seededRand(seed) * Math.PI;
+      const startX = slime.x + Math.cos(startAngle) * (slime.radius + 5);
+      const startY = slime.y + Math.sin(startAngle) * (slime.radius * 0.4);
+
+      // Arc direction: outward and slightly up/down, spreading wide
+      const outDir = startAngle + (seededRand(seed + 1) - 0.5) * 1.2;
+      const boltLen = 50 + seededRand(seed + 2) * 50; // 50-100px long
 
       ctx.beginPath();
+      let lx = startX;
+      let ly = startY;
       ctx.moveTo(lx, ly);
 
-      const segments = 4 + Math.floor(Math.random() * 3);
+      const segments = 5 + Math.floor(seededRand(seed + 3) * 3);
       for (let s = 0; s < segments; s++) {
-        lx += (Math.random() - 0.5) * 30;
-        ly -= Math.random() * 15 + 5;
+        const progress = (s + 1) / segments;
+        // Main direction is outward along outDir
+        const mainX = startX + Math.cos(outDir) * boltLen * progress;
+        const mainY = startY + Math.sin(outDir) * boltLen * progress;
+        // Add jagged offsets perpendicular to the bolt direction
+        const perpX = -Math.sin(outDir);
+        const perpY = Math.cos(outDir);
+        const jag = (seededRand(seed + s * 7 + 4) - 0.5) * 30;
+        lx = mainX + perpX * jag;
+        ly = mainY + perpY * jag;
         ctx.lineTo(lx, ly);
+
+        // Occasional branch fork
+        if (seededRand(seed + s * 13 + 50) < 0.3) {
+          const branchDir = outDir + (seededRand(seed + s * 17) - 0.5) * 1.5;
+          const branchLen = 15 + seededRand(seed + s * 19) * 25;
+          ctx.moveTo(lx, ly);
+          let bx = lx, by = ly;
+          for (let bs = 0; bs < 3; bs++) {
+            bx += Math.cos(branchDir) * (branchLen / 3) + (seededRand(seed + s * 23 + bs) - 0.5) * 12;
+            by += Math.sin(branchDir) * (branchLen / 3) + (seededRand(seed + s * 29 + bs) - 0.5) * 12;
+            ctx.lineTo(bx, by);
+          }
+          ctx.moveTo(lx, ly);
+        }
       }
 
-      ctx.strokeStyle = `rgba(200, 230, 255, ${0.6 + Math.random() * 0.4})`;
-      ctx.lineWidth = 1 + Math.random() * 1.5;
+      // Outer glow stroke
+      ctx.strokeStyle = `rgba(100, 180, 255, ${0.35 * boltAlpha})`;
+      ctx.lineWidth = 4;
       ctx.stroke();
 
-      // Bright core of lightning
-      if (Math.random() < 0.5) {
-        ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 + Math.random() * 0.3})`;
-        ctx.lineWidth = 0.5 + Math.random();
-        ctx.stroke();
-      }
+      // Main bolt
+      ctx.strokeStyle = `rgba(150, 210, 255, ${0.7 * boltAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Bright core
+      ctx.strokeStyle = `rgba(220, 240, 255, ${0.9 * boltAlpha})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
     }
 
     ctx.restore();
 
-    // Aura particles rising up
-    if (Math.random() < 0.6) {
+    // Aura particles rising up (slower spawn)
+    if (Math.random() < 0.35) {
       spawnParticles(
         slime.x + (Math.random() - 0.5) * slime.radius * 1.5,
         slime.y - Math.random() * slime.radius * 0.8,
@@ -850,10 +896,10 @@ function drawSlime(slime) {
       );
     }
     // Occasional electric spark particle
-    if (Math.random() < 0.15) {
+    if (Math.random() < 0.08) {
       spawnParticles(
-        slime.x + (Math.random() - 0.5) * slime.radius * 2,
-        slime.y - Math.random() * slime.radius,
+        slime.x + (Math.random() - 0.5) * slime.radius * 2.5,
+        slime.y - Math.random() * slime.radius * 1.2,
         '#aaddff', 1
       );
     }
