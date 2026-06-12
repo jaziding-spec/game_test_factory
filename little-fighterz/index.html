@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Little Fighterz</title>
+<style>
+  body { margin:0; background:#14141c; color:#cfd2dc; font-family:"Courier New",monospace;
+         display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+  h1 { margin:14px 0 8px; color:#ffb347; letter-spacing:4px; text-shadow:2px 2px 0 #802;}
+  canvas { background:#000; border:3px solid #444; border-radius:6px; box-shadow:0 0 30px #000;
+           image-rendering:pixelated; max-width:98vw; }
+  .controls { display:flex; gap:40px; margin:12px 0 24px; font-size:13px; }
+  .controls table { border-collapse:collapse; }
+  .controls td { padding:1px 10px; }
+  .controls th { color:#ffb347; text-align:left; padding-bottom:4px; }
+  kbd { background:#2a2a36; border:1px solid #555; border-radius:3px; padding:0 5px; color:#fff; }
+</style>
+</head>
+<body>
+<h1>LITTLE FIGHTERZ</h1>
+<canvas id="game" width="960" height="540"></canvas>
+<div class="controls">
+  <table>
+    <tr><th colspan="2">PLAYER 1</th></tr>
+    <tr><td>Move</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> (double-tap to run)</td></tr>
+    <tr><td>Attack</td><td><kbd>J</kbd></td></tr>
+    <tr><td>Jump</td><td><kbd>K</kbd></td></tr>
+    <tr><td>Defend</td><td><kbd>L</kbd></td></tr>
+  </table>
+  <table>
+    <tr><th colspan="2">PLAYER 2</th></tr>
+    <tr><td>Move</td><td><kbd>&uarr;</kbd><kbd>&larr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> (double-tap to run)</td></tr>
+    <tr><td>Attack</td><td><kbd>,</kbd></td></tr>
+    <tr><td>Jump</td><td><kbd>.</kbd></td></tr>
+    <tr><td>Defend</td><td><kbd>/</kbd></td></tr>
+  </table>
+  <table>
+    <tr><th colspan="2">SPECIAL MOVES</th></tr>
+    <tr><td>Skill 1</td><td><kbd>Defend</kbd> <kbd>&rarr;</kbd> <kbd>Attack</kbd> (tap in sequence)</td></tr>
+    <tr><td>Skill 2</td><td><kbd>Defend</kbd> <kbd>&darr;</kbd> <kbd>Attack</kbd></td></tr>
+    <tr><td>Pause</td><td><kbd>P</kbd></td></tr>
+  </table>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
